@@ -2,18 +2,31 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
+
+	pokeapi "github.com/nrm-mrn/pokedexcli/internal/pokeAPI"
 )
 
 type cliCommand struct {
 	name        string
 	description string
-	callback    func() error
+	callback    func(*config) error
+}
+type config struct {
+	nextArea *string
+	prevArea *string
 }
 
-func commandHelp() error {
+var configValues config
+
+//var staleTime = time.Second * 5
+
+//var cache = pokecache.NewCache(staleTime)
+
+func commandHelp(c *config) error {
 	fmt.Printf("Here are all of the available commands:\n")
 	commandsBank := getCommands()
 	for key := range commandsBank {
@@ -22,8 +35,41 @@ func commandHelp() error {
 	fmt.Printf("To get more info about a command use help <command>\n")
 	return nil
 }
-func commandExit() error {
+func commandExit(c *config) error {
 	fmt.Printf("Goodbuy!")
+	return nil
+}
+
+func commandMap(c *config) error {
+	var locationsStruct pokeapi.LocationsResponse
+	var err error
+	locationsStruct, err = pokeapi.GetLocations(c.nextArea)
+	if err != nil {
+		return err
+	}
+
+	c.nextArea = locationsStruct.Next
+	c.prevArea = locationsStruct.Previous
+	for _, area := range locationsStruct.Results {
+		fmt.Printf("%v\n", area.Name)
+	}
+	return nil
+
+}
+
+func commandMapb(c *config) error {
+	if c.prevArea == nil {
+		return errors.New("Already on the first page")
+	}
+	locationsStruct, err := pokeapi.GetLocations(c.prevArea)
+	if err != nil {
+		return err
+	}
+	c.nextArea = locationsStruct.Next
+	c.prevArea = locationsStruct.Previous
+	for _, area := range locationsStruct.Results {
+		fmt.Printf("%v\n", area.Name)
+	}
 	return nil
 }
 
@@ -38,9 +84,21 @@ func getCommands() map[string]cliCommand {
 		description: "exits the application\n",
 		callback:    commandExit,
 	}
+	mapCom := cliCommand{
+		name:        "map",
+		description: "displays 20 location areas in the pokemon world. Each subsequent call to map will display the next 20 locations and so on",
+		callback:    commandMap,
+	}
+	mapbCom := cliCommand{
+		name:        "mapb",
+		description: "displays 20 previous location areas if previous page exists",
+		callback:    commandMapb,
+	}
 	return map[string]cliCommand{
 		"help": helpCom,
 		"exit": exitCom,
+		"map":  mapCom,
+		"mapb": mapbCom,
 	}
 }
 
@@ -69,15 +127,21 @@ func main() {
 		}
 		if len(tokens) > 2 {
 			unknownCommand()
+			continue
+		}
+		if len(tokens) == 0 {
+			continue
 		}
 		if command, ok := commandsBank[tokens[0]]; ok {
-			command.callback()
+			err := command.callback(&configValues)
+			if err != nil {
+				fmt.Printf("%v\n", err)
+			}
 			if command.name == "exit" {
-				break
+				os.Exit(0)
 			}
 		} else {
 			unknownCommand()
 		}
 	}
-
 }
