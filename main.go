@@ -18,13 +18,10 @@ type cliCommand struct {
 type config struct {
 	nextArea *string
 	prevArea *string
+	param    *string
 }
 
 var configValues config
-
-//var staleTime = time.Second * 5
-
-//var cache = pokecache.NewCache(staleTime)
 
 func commandHelp(c *config) error {
 	fmt.Printf("Here are all of the available commands:\n")
@@ -73,6 +70,20 @@ func commandMapb(c *config) error {
 	return nil
 }
 
+func commandExplore(c *config) error {
+	if c.param == nil {
+		return errors.New("Area name is nil, use map for list of all names")
+	}
+	exploredLoca, err := pokeapi.ExploreLocation(c.param)
+	if err != nil {
+		return err
+	}
+	for _, encounter := range exploredLoca.PokemonEncounters {
+		fmt.Printf("%v\n", encounter.Pokemon.Name)
+	}
+	return nil
+}
+
 func getCommands() map[string]cliCommand {
 	helpCom := cliCommand{
 		name:        "help",
@@ -91,14 +102,20 @@ func getCommands() map[string]cliCommand {
 	}
 	mapbCom := cliCommand{
 		name:        "mapb",
-		description: "displays 20 previous location areas if previous page exists",
+		description: "displays 20 previous location areas if previous page exists\n",
 		callback:    commandMapb,
 	}
+	exploreCom := cliCommand{
+		name:        "explore <location_name>",
+		description: "displays pokemon names that one can encounter in specified location\n",
+		callback:    commandExplore,
+	}
 	return map[string]cliCommand{
-		"help": helpCom,
-		"exit": exitCom,
-		"map":  mapCom,
-		"mapb": mapbCom,
+		"help":    helpCom,
+		"exit":    exitCom,
+		"map":     mapCom,
+		"mapb":    mapbCom,
+		"explore": exploreCom,
 	}
 }
 
@@ -119,6 +136,16 @@ func main() {
 			case "help":
 				if command, ok := commandsBank[tokens[1]]; ok {
 					fmt.Printf(command.description)
+				} else {
+					unknownCommand()
+				}
+			default:
+				configValues.param = &tokens[1]
+				if command, ok := commandsBank[tokens[0]]; ok {
+					err := command.callback(&configValues)
+					if err != nil {
+						fmt.Printf("%v\n", err)
+					}
 				} else {
 					unknownCommand()
 				}
